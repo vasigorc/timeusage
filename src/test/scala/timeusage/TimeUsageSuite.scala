@@ -123,7 +123,7 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
 
     val expectedNrOfWomen = inputList.count(_.tesex == 2d)
     val actualNrOfWomen = generalizedDf.where('sex === "female").count()
-    assert(expectedNrOfWomen == actualNrOfWomen, s"There should be $expectedNrOfWomen in the DF")
+    assert(expectedNrOfWomen == actualNrOfWomen, s"There should be $expectedNrOfWomen of women in the DF")
   }
 
   private def getDoubleValueForColumn(generalizedDf: DataFrame, column: Column, filter: Column) = {
