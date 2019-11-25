@@ -1,8 +1,8 @@
 package timeusage
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.{Column, DataFrame}
 import org.junit.runner.RunWith
 import org.scalatest
 import org.scalatest.junit.JUnitRunner
@@ -19,8 +19,10 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
 
   org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)
 
-  private val readData = scalatest.Tag("Read-in Data")
-  private val project = scalatest.Tag("Project")
+  object ReadData extends scalatest.Tag("Read-in Data")
+  object Project extends scalatest.Tag("Project")
+  object Aggregate extends scalatest.Tag("Aggregate")
+
   private val inputList = List(Atussum("John", 2d, 1d, 22d), Atussum("Jean-Pierre", 4d, 1d, 28d),
     Atussum("Marie", 1d, 2d, 40d), Atussum("Manon", 4d, 2d, 40d),
     Atussum("Charles", 2d, 1d, 15d))
@@ -38,12 +40,15 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
 
   private val atussumOccupationalColumnHeaders = List("t1801", "t1803", "t05", "t1805", "t10", "t12")
   var df: DataFrame = _
+  var generalizedDf: DataFrame = _
 
   before {
     df = inputList.toDF
+    val (primaryColumns, workingColumns, otherColumns) = classifiedColumns(atussumOccupationalColumnHeaders)
+    generalizedDf = timeUsageSummary(primaryColumns, workingColumns, otherColumns, df)
   }
 
-  test("`dfSchema` produces right schema based on input", readData) {
+  test("`dfSchema` produces right schema based on input", ReadData) {
     val header =
       """
         tucaseid,gemetsta,gtmetsta,peeduca,pehspnon,ptdtrace,teage,telfs,temjot,teschenr,teschlvl,tesex,
@@ -58,7 +63,7 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
     assert(header.containsAll(fieldNames.toList), "All fields from the raw header should have been imported")
   }
 
-  test("`row` generates a Row of (String, Double*) from the passed-in list of Strings", readData) {
+  test("`row` generates a Row of (String, Double*) from the passed-in list of Strings", ReadData) {
     val validInput = List("Vasile", "0.1", "0.2", "0.3", "0.4")
 
     val result = row(validInput)
@@ -78,7 +83,7 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
     RandomStringUtils.randomAlphanumeric(length)
   }
 
-  test("`classifiedColumns`should triage column names into three groups of columns", project) {
+  test("`classifiedColumns`should triage column names into three groups of columns", Project) {
     val primaryNeeds: List[String] = generateColumnNamesFromPrefixes(primaryNeedsPrefixes)
     val workingActivities: List[String] = generateColumnNamesFromPrefixes(workingActivitiesPrefixes)
     val otherActivities: List[String] = generateColumnNamesFromPrefixes(otherActivitiesPrefixes)
@@ -92,11 +97,7 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
     assert(otherActivities.map(col) containsAll otherColumns, "all other columns should be found")
   }
 
-  test("`timeUsageSummary` should combine occupational columns", project) {
-    val (primaryColumns, workingColumns, otherColumns) = classifiedColumns(atussumOccupationalColumnHeaders)
-
-    val generalizedDf = timeUsageSummary(primaryColumns, workingColumns, otherColumns, df)
-    // primary needs
+  test("`timeUsageSummary` should combine occupational columns", Project) {
 
     val john = inputList.head
 
@@ -116,14 +117,16 @@ class TimeUsageSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter
     assert(expectedOtherTime == actualOtherTime, "other time columns should be summed")
   }
 
-  test("`timeUsageSummary` should generalize work status, sex and age information", project) {
-    val (primaryColumns, workingColumns, otherColumns) = classifiedColumns(atussumOccupationalColumnHeaders)
-
-    val generalizedDf = timeUsageSummary(primaryColumns, workingColumns, otherColumns, df)
-
+  test("`timeUsageSummary` should generalize work status, sex and age information", Project) {
     val expectedNrOfWomen = inputList.count(_.tesex == 2d)
     val actualNrOfWomen = generalizedDf.where('sex === "female").count()
     assert(expectedNrOfWomen == actualNrOfWomen, s"There should be $expectedNrOfWomen of women in the DF")
+  }
+
+
+  test("`timeUsageGroupedSql` should return aggregated data by `working`, `sex`, `age`", Aggregate) {
+    val aggregatedDataframe = timeUsageGroupedSql(generalizedDf)
+    aggregatedDataframe.show()
   }
 
   private def getDoubleValueForColumn(generalizedDf: DataFrame, column: Column, filter: Column) = {

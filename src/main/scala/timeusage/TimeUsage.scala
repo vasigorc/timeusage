@@ -213,7 +213,9 @@ object TimeUsage {
   def timeUsageGroupedSqlQuery(viewName: String): String = {
     val criteria = "working, sex, age"
     s"""
-      SELECT $criteria, ROUND(AVG(primaryNeeds), 2), ROUND(AVG(work), 2), ROUND(AVG(other), 2)
+      SELECT $criteria, ROUND(AVG(primaryNeeds), 2) as avg_primary,
+                        ROUND(AVG(work), 2) as avg_work,
+                        ROUND(AVG(other), 2) as avg_other
       FROM $viewName
       GROUP BY $criteria
       ORDER BY $criteria
